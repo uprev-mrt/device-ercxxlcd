@@ -90,31 +90,129 @@ mrt_status_t sed15xx_sw_reset(sed15xx_t* dev)
 
 mrt_status_t sed15xx_set_cursor(sed15xx_t* dev, uint16_t x, uint16_t y)
 {
-  //TODO set cursor
+  dev->mCursor = (y * dev->mWidth) + x;
+
   return MRT_STATUS_OK;
 }
 
 mrt_status_t sed15xx_pixel(sed15xx_t* dev,uint16_t x, uint16_t y, bool val )
 {
-  //TODO
+  dev->mCursor  = (y * dev->mWidth) + x;
+  uint32_t byteOffset = (dev->mCursor  / 8);
+  uint8_t bitOffset = dev->mCursor  % 8;
+
+  if( val)
+    dev->mBuffer[byteOffset] |= (1 << bitOffset);
+  else
+    dev->mBuffer[byteOffset] &= (~(1 << bitOffset));
+
+  //advance
+  dev->mCursor++;
+
+  //wrap
+  if(dev->mCursor == (dev->mWidth * dev->mHeight))
+    dev->mCursor = 0;
+
   return MRT_STATUS_OK;
 }
 
-mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len)
+mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len, bool wrap)
 {
-  //TODO
+  //get number of bits off of alignment in case we are not writing on a byte boundary
+  uint32_t byteOffset = (dev->mCursor  / 8);
+  uint8_t bitOffset = dev->mCursor % 8;
+
+  //get number of bytes before we would wrap to next row
+  int nextRow = (dev->mWidth - (dev->mCursor % dev->mWidth));
+  if((nextRow < len) && (wrap == false))
+  {
+    len = nextRow;
+  }
+
+
+  uint8_t prevByte; //used for shifting in data when not aligned
+  uint8_t mask;
+
+
+  //If we are byte aligned , just memcpy the data in
+  if(bitOffset == 0)
+  {
+    memcpy(&dev->mBuffer[byteOffset], data, len);
+  }
+  //If we are not byte aligned, we have to mask and shift in data
+  else
+  {
+    mask = 0xFF << (8-bitOffset);
+    prevByte = dev->mBuffer[byteOffset] & mask;
+
+    for(int i=0; i < len; i++)
+    {
+      dev->mBuffer[byteOffset++] = prevByte | (data[i] >> bitOffset);
+      prevByte = data[i] << (8-bitOffset);
+
+      if(byteOffset >= dev->mBufferSize)
+        byteOffset = 0;
+    }
+  }
+
+
+  //advance cursor
+  dev->mCursor += len;
+
+  // If its gone over, wrap
+  while(dev->mCursor >= (dev->mWidth * dev->mHeight))
+    dev->mCursor -=  (dev->mWidth * dev->mHeight);
+
   return MRT_STATUS_OK;
 }
 
-mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp bmp)
+mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp* bmp)
 {
-  //TODO
+  uint32_t bmpIdx = 0;
+  for(int i=0; i < bmp->height; i ++)
+  {
+    sed15xx_set_cursor(dev,x,y+i);
+    sed15xx_write_buffer(dev, &bmp->data[bmpIdx], bmp->width, false);
+    bmpIdx += bmp->width;
+  }
+
   return MRT_STATUS_OK;
 }
 
 mrt_status_t sed15xx_print( sed15xx_t* dev, uint16_t x, uint16_t y, const char * text)
 {
-  //TODO
+  if(dev->mFont == NULL)
+    return MRT_STATUS_OK;
+
+  uint16_t xx =x;
+  uint16_t yy = y;
+  GFXglyph* glyph;
+  GFXBmp bmp;
+  char c = *text++;
+
+  while(c != 0)
+  {
+    if(c == '\n')
+    {
+      yy+= dev->mFont->yAdvance;
+    }
+    else
+    {
+      glyph = &dev->mFont->glyph[c - dev->mFont->first]; //index in glyph array is offset by first printable char in font
+
+      //map glyph to a bitmap that we can draw
+      bmp.data = &dev->mFont->bitmap[glyph->bitmapOffset];
+      bmp.width = glyph->width;
+      bmp.height = glyph->height;
+
+      //draw the character
+      sed15xx_draw_bmp(dev, xx + glyph->xOffset, yy + glyph->yOffset, &bmp );
+      xx += glyph->xOffset + glyph->xAdvance;
+    }
+
+    char c = *text++;
+  }
+
   return MRT_STATUS_OK;
 }
 

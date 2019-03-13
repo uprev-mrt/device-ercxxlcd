@@ -41,7 +41,7 @@
 typedef struct{
   int mWidth;                   //width of display in pixels
   int mHeight;                  //height of display in pixels
-  uint32_t mCursor;             //cursor in buffer of display
+  uint32_t mCursor;             //cursor in buffer of display (by bit)
   GFXfont* mFont;               //font to use for printing
   uint8_t* mBuffer;             //buffer of pixel data
   int mBufferSize;
@@ -115,7 +115,7 @@ mrt_status_t sed15xx_pixel(sed15xx_t* dev,uint16_t x, uint16_t y, bool val );
   *@param len number of bytes being written
   *@return status of operation
   */
-mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len);
+mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len, bool wrap);
 
 /**
   *@brief Draws a bitmap to the buffer
@@ -125,7 +125,7 @@ mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len);
   *@param bmp bitmap to draw
   *@return status of operation
   */
-mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp bmp);
+mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp* bmp);
 
 /**
   *@brief Draws rendered text to the buffer
