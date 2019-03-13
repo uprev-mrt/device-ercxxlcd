@@ -26,8 +26,16 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   //set cursor to 0,0
   sed15xx_set_cursor(dev, 0,0);
 
+  //disable display while we write the data
+  sed15xx_enable(dev, false);
+
   //write data buffer
-  for(int i=0; i < dev->mBufferSize; i++ )
+  MRT_8080_DATA_WRITE(dev->mBuffer, dev->mBufferSize);
+
+  //re-enable display
+  sed15xx_enable(dev, true);
+
+  return MRT_STATUS_OK;
 }
 
 mrt_status_t sed15xx_enable(sed15xx_t* dev, bool val)
@@ -49,13 +57,30 @@ mrt_status_t sed15xx_sw_reset(sed15xx_t* dev)
 
 mrt_status_t sed15xx_set_cursor(sed15xx_t* dev, uin16_t x, uin16_t y)
 {
-
+  //TODO set cursor
+  return MRT_STATUS_OK;
 }
 
-mrt_status_t sed15xx_pixel(sed15xx_t* dev,uin16_t x, uin16_t y, bool val );
+mrt_status_t sed15xx_pixel(sed15xx_t* dev,uin16_t x, uin16_t y, bool val )
+{
+  //TODO
+  return MRT_STATUS_OK;
+}
 
-mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len);
+mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len)
+{
+  //TODO
+  return MRT_STATUS_OK;
+}
 
-mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uin16_t x, uin16_t y, GFXBmp bmp);
+mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uin16_t x, uin16_t y, GFXBmp bmp)
+{
+  //TODO
+  return MRT_STATUS_OK;
+}
 
-mrt_status_t sed15xx_print( uin16_t x, uint16_t y, const char * text);
+mrt_status_t sed15xx_print( uin16_t x, uint16_t y, const char * text)
+{
+  //TODO
+  return MRT_STATUS_OK;
+}
