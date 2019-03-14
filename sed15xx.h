@@ -54,9 +54,9 @@ typedef struct{
   uint32_t mCursor;             //cursor in buffer of display (by bit)
   GFXfont* mFont;               //font to use for printing
   uint8_t* mBuffer;             //buffer of pixel data
-  int mBufferSize;
-  bool mInverted;
-  sed15xx_hw_cfg_t mHW;
+  int mBufferSize;              //size of buffer in bytes
+  bool mInverted;               //Pixel logix inversion when true a '1' is an active pixel
+  sed15xx_hw_cfg_t mHW;         //ptr to the hardware configuration for this device
 }sed15xx_t;
 
 

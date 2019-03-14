@@ -132,20 +132,25 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   // make sure we are in data mode
   MRT_GPIO_WRITE(dev->mHW.mA0, HIGH);
 
-
+  //local buffer to store transposed block
   uint8_t transposedBuffer[8];
 
   for(int i=0; i < dev->mBufferSize/8; i++)
   {
 
+    //rotate block of pixels to match lcd memory structure. see README.md for more information
     transpose8(&dev->mBuffer[i*8], transposedBuffer);
 
     for(int a=0; a <8; a++)
     {
       //set WR low
       MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
-      //write command byte
-      MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+
+      //write data byte (invert pixels if mInverted is set)
+      if(dev->mInverted)
+        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, ~(dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+      else
+        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mBuffer[i] << (dev->mHW.mDataOffset)));
       //set WR high to clock in cmd
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
