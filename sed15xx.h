@@ -38,6 +38,16 @@
 #define SED15XX_CMD_COLUMN_ADDRESS_SET_LOW(column)   (0x00 | ((column >> 0) & 0x0F))
 
 
+
+
+typedef struct{
+  mrt_gpio_port_t mPort;  //port for bus
+  uint8_t mDataOffset;    //data offset on port
+  mrt_gpio_t mWR;         //WR pin
+  mrt_gpio_t mRD;         //RD pin
+  mrt_gpio_t mA0;         //A0 pin
+}sed15xx_hw_cfg_t;
+
 typedef struct{
   int mWidth;                   //width of display in pixels
   int mHeight;                  //height of display in pixels
@@ -45,20 +55,20 @@ typedef struct{
   GFXfont* mFont;               //font to use for printing
   uint8_t* mBuffer;             //buffer of pixel data
   int mBufferSize;
-  mrt_pbus_handle_t mHandle;    //platform dependent handle for parallel bus
   bool mInverted;
+  sed15xx_hw_cfg_t mHW;
 }sed15xx_t;
 
 
 /**
   *@brief initialize lcd driver
   *@param dev ptr to device descriptor
-  *@param handle platform handle for parallel bus
+  *@param hw sed15xx hardware config
   *@param width width (in pixels) of display buffer
   *@param height height (in pixels) of display buffer
   *@return MRT_STATUS_OK
   */
-mrt_status_t sed15xx_init(sed15xx_t* dev, mrt_pbus_handle_t handle,  int width, int height);
+mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw, int width, int height);
 
 /**
   *@brief sends command over parallel bus to device

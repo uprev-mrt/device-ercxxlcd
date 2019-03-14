@@ -7,10 +7,10 @@
 
 #include "sed15xx.h"
 
-mrt_status_t sed15xx_init(sed15xx_t* dev, mrt_pbus_handle_t handle,  int width, int height )
+mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int height )
 {
 
-  dev->mHandle = handle;
+  memcpy(&dev->mHW, hw, sizeof(sed15xx_hw_cfg_t));
   dev->mWidth = width;
   dev->mHeight = height;
   dev->mCursor =0;
@@ -41,15 +41,25 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, mrt_pbus_handle_t handle,  int width, 
 
 void sed15xx_cmd(sed15xx_t* dev, uint8_t cmd)
 {
+  uint32_t dataMask = 0xFF << dev->mHW.mDataOffset;
+
   //set bus to command/ctrl mode
-  MRT_PBUS_MODE(dev->mHandle, PBUS_MODE_CMD);
+  MRT_GPIO_WRITE(dev->mHW.mA0, LOW);
+
+  //set WR low
+  MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
 
   //write command byte
-  MRT_PBUS_WRITE(dev->mHandle, cmd);
+  MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (cmd << (dev->mHW.mDataOffset)));
+
+  //set WR high to clock in cmd
+  MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+
 }
 
 mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 {
+  uint32_t dataMask = 0xFF << dev->mHW.mDataOffset;
   //set cursor to 0,0
   sed15xx_set_cursor(dev, 0,0);
 
@@ -57,12 +67,21 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   sed15xx_enable(dev, false);
 
   // make sure we are in data mode
-  MRT_PBUS_MODE(dev->mHandle, PBUS_MODE_DATA);
+  MRT_GPIO_WRITE(dev->mHW.mA0, HIGH);
 
   //write data buffer
   for(int i=0; i < dev->mBufferSize; i++)
   {
-    MRT_PBUS_WRITE(dev->mHandle, dev->mBuffer[i]);
+    //set WR low
+    MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
+
+    //TODO rotate page data
+
+    //write command byte
+    MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+
+    //set WR high to clock in cmd
+    MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
   }
 
   //re-enable display
@@ -210,7 +229,7 @@ mrt_status_t sed15xx_print( sed15xx_t* dev, uint16_t x, uint16_t y, const char *
       xx += glyph->xOffset + glyph->xAdvance;
     }
 
-    char c = *text++;
+    c = *text++;
   }
 
   return MRT_STATUS_OK;
