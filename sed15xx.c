@@ -7,6 +7,69 @@
 
 #include "sed15xx.h"
 
+
+/*Memory mapping to the buffer
+*
+* The lcd buffer stores pixel data 'sideways'
+*   0[4] = byte 0, bit 4
+*
+* lcd ram:
+*
+* 0[0] 1[0] 2[0] 3[0] 4[0] 5[0] 6[0] 7[0] .....
+* 0[1] 1[1] 2[1] 3[1] 4[1] 5[1] 6[1] 7[1] .....
+* 0[2] 1[2] 2[2] 3[2] 4[2] 5[2] 6[2] 7[2] .....
+* 0[3] 1[3] 2[3] 3[3] 4[3] 5[3] 6[3] 7[3] .....
+* 0[4] 1[4] 2[4] 3[4] 4[4] 5[4] 6[4] 7[4] .....
+* 0[5] 1[5] 2[5] 3[5] 4[5] 5[5] 6[5] 7[5] .....
+* 0[6] 1[6] 2[6] 3[6] 4[6] 5[6] 6[6] 7[6] .....
+* 0[7] 1[7] 2[7] 3[7] 4[7] 5[7] 6[7] 7[7] .....
+*
+* local buffer:
+*
+* 0[7] 0[6] 0[5] 0[4] 0[3] 0[2] 0[1] 0[0] ,
+* 1[7] 1[6] 1[5] 1[4] 1[3] 1[2] 1[1] 1[0] ,
+* 2[7] 2[6] 2[5] 2[4] 2[3] 2[2] 2[1] 2[0] ,
+* 3[7] 3[6] 3[5] 3[4] 3[3] 3[2] 3[1] 3[0] ,
+* 4[7] 4[6] 4[5] 4[4] 4[3] 4[2] 4[1] 4[0] ,
+* 5[7] 5[6] 5[5] 5[4] 5[3] 5[2] 5[1] 5[0] ,
+* 6[7] 6[6] 6[5] 6[4] 6[3] 6[2] 6[1] 6[0] ,
+* 7[7] 7[6] 7[5] 7[4] 7[3] 7[2] 7[1] 7[0] ,
+*
+* So before writing to the device, we take a 'block' which is 8 pixels by 8 pixels,
+* and rotate it to match the lcd ram
+*
+*/
+
+/**
+  *@brief rotates an 8x8 matrix of bits
+  *@param A input array
+  *@param B output array
+  *
+  *@notes 'Hackers Delight' page 108, Henry S. Warren
+  */
+inline void transpose8(uint8_t A[8], uint8_t B[8])
+{
+   uint32_t x, y, t;
+
+   // Load the array and pack it into x and y.
+
+   x = (A[0]<<24)   | (A[1]<<16)   | (A[2]<<8) | A[3];
+   y = (A[4]<<24) | (A[5]<<16) | (A[6]<<8) | A[7];
+
+   t = (x ^ (x >> 7)) & 0x00AA00AA;  x = x ^ t ^ (t << 7);
+   t = (y ^ (y >> 7)) & 0x00AA00AA;  y = y ^ t ^ (t << 7);
+
+   t = (x ^ (x >>14)) & 0x0000CCCC;  x = x ^ t ^ (t <<14);
+   t = (y ^ (y >>14)) & 0x0000CCCC;  y = y ^ t ^ (t <<14);
+
+   t = (x & 0xF0F0F0F0) | ((y >> 4) & 0x0F0F0F0F);
+   y = ((x << 4) & 0xF0F0F0F0) | (y & 0x0F0F0F0F);
+   x = t;
+
+   B[0]=x>>24;    B[1]=x>>16;    B[2]=x>>8;  B[3]=x;
+   B[4]=y>>24;  B[5]=y>>16;  B[6]=y>>8;  B[7]=y;
+}
+
 mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int height )
 {
 
@@ -69,19 +132,25 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   // make sure we are in data mode
   MRT_GPIO_WRITE(dev->mHW.mA0, HIGH);
 
-  //write data buffer
-  for(int i=0; i < dev->mBufferSize; i++)
+
+  uint8_t transposedBuffer[8];
+
+  for(int i=0; i < dev->mBufferSize/8; i++)
   {
-    //set WR low
-    MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
 
-    //TODO rotate page data
+    transpose8(&dev->mBuffer[i*8], transposedBuffer);
 
-    //write command byte
-    MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+    for(int a=0; a <8; a++)
+    {
+      //set WR low
+      MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
+      //write command byte
+      MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+      //set WR high to clock in cmd
+      MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
-    //set WR high to clock in cmd
-    MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+    }
+
   }
 
   //re-enable display
@@ -200,23 +269,29 @@ mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp* bm
 
 mrt_status_t sed15xx_print( sed15xx_t* dev, uint16_t x, uint16_t y, const char * text)
 {
+
+  //if a font has not been set, return error
   if(dev->mFont == NULL)
-    return MRT_STATUS_OK;
+    return MRT_STATUS_ERROR;
 
-  uint16_t xx =x;
+  uint16_t xx =x;     //current position for writing
   uint16_t yy = y;
-  GFXglyph* glyph;
-  GFXBmp bmp;
-  char c = *text++;
+  GFXglyph* glyph;    //pointer to glyph for current character
+  GFXBmp bmp;         //bitmap struct used to draw glyph
+  char c = *text++;   //grab first character from string
 
+  //run until we hit a null character (end of string)
   while(c != 0)
   {
     if(c == '\n')
     {
+      //if character is newline, we advance the y, and reset x
       yy+= dev->mFont->yAdvance;
+      xx = x;
     }
-    else
+    else if((c >= dev->mFont->first) && (c <= dev->mFont->last))// make sure the font contains this character
     {
+      //grab the glyph for current character from our font
       glyph = &dev->mFont->glyph[c - dev->mFont->first]; //index in glyph array is offset by first printable char in font
 
       //map glyph to a bitmap that we can draw
@@ -229,6 +304,8 @@ mrt_status_t sed15xx_print( sed15xx_t* dev, uint16_t x, uint16_t y, const char *
       xx += glyph->xOffset + glyph->xAdvance;
     }
 
+
+    //get next character
     c = *text++;
   }
 

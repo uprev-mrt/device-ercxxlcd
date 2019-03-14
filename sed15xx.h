@@ -123,6 +123,7 @@ mrt_status_t sed15xx_pixel(sed15xx_t* dev,uint16_t x, uint16_t y, bool val );
   *@param dev ptr to device descriptor
   *@param data ptr to data being written
   *@param len number of bytes being written
+  *@param wrap whether or not to wrap when we reach the end of current row
   *@return status of operation
   */
 mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len, bool wrap);
