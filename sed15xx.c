@@ -72,15 +72,13 @@ inline void transpose8(uint8_t A[8], uint8_t B[8])
 
 mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int height )
 {
-
+  //copy in hw config
   memcpy(&dev->mHW, hw, sizeof(sed15xx_hw_cfg_t));
-  dev->mWidth = width;
-  dev->mHeight = height;
-  dev->mCursor =0;
-  dev->mBufferSize = (width * height)/8;
-  dev->mBuffer = (uint8_t*)malloc( dev->mBufferSize);
+
   dev->mInverted = false;
 
+  // initialize canvas as buffered canvas
+  mono_gfx_init_buffered(&dev->mCanvas, width, height);
 
 /*
    * Initialize display.  This code follows the sequence in the
@@ -123,8 +121,12 @@ void sed15xx_cmd(sed15xx_t* dev, uint8_t cmd)
 mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 {
   uint32_t dataMask = 0xFF << dev->mHW.mDataOffset;
+
   //set cursor to 0,0
-  sed15xx_set_cursor(dev, 0,0);
+  sed15xx_cmd(dev,SED15XX_CMD_START_LINE_SET(0));
+  sed15xx_cmd(dev,SED15XX_CMD_PAGE_ADDRESS_SET(0));
+  sed15xx_cmd(dev,SED15XX_CMD_COLUMN_ADDRESS_SET_LOW(0));
+  sed15xx_cmd(dev,SED15XX_CMD_COLUMN_ADDRESS_SET_HIGH(0));
 
   //disable display while we write the data
   sed15xx_enable(dev, false);
@@ -135,11 +137,11 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   //local buffer to store transposed block
   uint8_t transposedBuffer[8];
 
-  for(int i=0; i < dev->mBufferSize/8; i++)
+  for(int i=0; i < dev->mCanvas.mBufferSize/8; i++)
   {
 
     //rotate block of pixels to match lcd memory structure. see README.md for more information
-    transpose8(&dev->mBuffer[i*8], transposedBuffer);
+    transpose8(&dev->mCanvas.mBuffer[i*8], transposedBuffer);
 
     for(int a=0; a <8; a++)
     {
@@ -148,9 +150,9 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 
       //write data byte (invert pixels if mInverted is set)
       if(dev->mInverted)
-        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, ~(dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, ~(dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
       else
-        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mBuffer[i] << (dev->mHW.mDataOffset)));
+        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
       //set WR high to clock in cmd
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
@@ -181,144 +183,19 @@ mrt_status_t sed15xx_sw_reset(sed15xx_t* dev)
   return MRT_STATUS_OK;
 }
 
-mrt_status_t sed15xx_set_cursor(sed15xx_t* dev, uint16_t x, uint16_t y)
-{
-  dev->mCursor = (y * dev->mWidth) + x;
-
-  return MRT_STATUS_OK;
-}
-
-mrt_status_t sed15xx_pixel(sed15xx_t* dev,uint16_t x, uint16_t y, bool val )
-{
-  dev->mCursor  = (y * dev->mWidth) + x;
-  uint32_t byteOffset = (dev->mCursor  / 8);
-  uint8_t bitOffset = dev->mCursor  % 8;
-
-  if( val)
-    dev->mBuffer[byteOffset] |= (1 << bitOffset);
-  else
-    dev->mBuffer[byteOffset] &= (~(1 << bitOffset));
-
-  //advance
-  dev->mCursor++;
-
-  //wrap
-  if(dev->mCursor == (dev->mWidth * dev->mHeight))
-    dev->mCursor = 0;
-
-  return MRT_STATUS_OK;
-}
-
-mrt_status_t sed15xx_write_buffer(sed15xx_t* dev, uint8_t* data, int len, bool wrap)
-{
-  //get number of bits off of alignment in case we are not writing on a byte boundary
-  uint32_t byteOffset = (dev->mCursor  / 8);
-  uint8_t bitOffset = dev->mCursor % 8;
-
-  //get number of bytes before we would wrap to next row
-  int nextRow = (dev->mWidth - (dev->mCursor % dev->mWidth));
-  if((nextRow < len) && (wrap == false))
-  {
-    len = nextRow;
-  }
-
-
-  uint8_t prevByte; //used for shifting in data when not aligned
-  uint8_t mask;
-
-
-  //If we are byte aligned , just memcpy the data in
-  if(bitOffset == 0)
-  {
-    memcpy(&dev->mBuffer[byteOffset], data, len);
-  }
-  //If we are not byte aligned, we have to mask and shift in data
-  else
-  {
-    mask = 0xFF << (8-bitOffset);
-    prevByte = dev->mBuffer[byteOffset] & mask;
-
-    for(int i=0; i < len; i++)
-    {
-      dev->mBuffer[byteOffset++] = prevByte | (data[i] >> bitOffset);
-      prevByte = data[i] << (8-bitOffset);
-
-      if(byteOffset >= dev->mBufferSize)
-        byteOffset = 0;
-    }
-  }
-
-
-  //advance cursor
-  dev->mCursor += len;
-
-  // If its gone over, wrap
-  while(dev->mCursor >= (dev->mWidth * dev->mHeight))
-    dev->mCursor -=  (dev->mWidth * dev->mHeight);
-
-  return MRT_STATUS_OK;
-}
 
 mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp* bmp)
 {
-  uint32_t bmpIdx = 0;
-  for(int i=0; i < bmp->height; i ++)
-  {
-    sed15xx_set_cursor(dev,x,y+i);
-    sed15xx_write_buffer(dev, &bmp->data[bmpIdx], bmp->width, false);
-    bmpIdx += bmp->width;
-  }
-
-  return MRT_STATUS_OK;
+  return mono_gfx_draw_bmp(&dev->mCanvas, x,y,bmp);
 }
 
 mrt_status_t sed15xx_print( sed15xx_t* dev, uint16_t x, uint16_t y, const char * text)
 {
 
-  //if a font has not been set, return error
-  if(dev->mFont == NULL)
-    return MRT_STATUS_ERROR;
-
-  uint16_t xx =x;     //current position for writing
-  uint16_t yy = y;
-  GFXglyph* glyph;    //pointer to glyph for current character
-  GFXBmp bmp;         //bitmap struct used to draw glyph
-  char c = *text++;   //grab first character from string
-
-  //run until we hit a null character (end of string)
-  while(c != 0)
-  {
-    if(c == '\n')
-    {
-      //if character is newline, we advance the y, and reset x
-      yy+= dev->mFont->yAdvance;
-      xx = x;
-    }
-    else if((c >= dev->mFont->first) && (c <= dev->mFont->last))// make sure the font contains this character
-    {
-      //grab the glyph for current character from our font
-      glyph = &dev->mFont->glyph[c - dev->mFont->first]; //index in glyph array is offset by first printable char in font
-
-      //map glyph to a bitmap that we can draw
-      bmp.data = &dev->mFont->bitmap[glyph->bitmapOffset];
-      bmp.width = glyph->width;
-      bmp.height = glyph->height;
-
-      //draw the character
-      sed15xx_draw_bmp(dev, xx + glyph->xOffset, yy + glyph->yOffset, &bmp );
-      xx += glyph->xOffset + glyph->xAdvance;
-    }
-
-
-    //get next character
-    c = *text++;
-  }
-
-  return MRT_STATUS_OK;
+  return mono_gfx_print(&dev->mCanvas,x,y,text);
 }
 
 mrt_status_t sed15xx_fill(sed15xx_t* dev, uint8_t val)
 {
-  memset(dev->mBuffer, val, dev->mBufferSize);
-  return MRT_STATUS_OK;
+  return mono_gfx_fill(&dev->mCanvas,val);
 }
