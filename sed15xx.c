@@ -8,67 +8,22 @@
 #include "sed15xx.h"
 
 
-/*Memory mapping to the buffer
-*
-* The lcd buffer stores pixel data 'sideways'
-*   0[4] = byte 0, bit 4
-*
-* lcd ram:
-*
-* 0[0] 1[0] 2[0] 3[0] 4[0] 5[0] 6[0] 7[0] .....
-* 0[1] 1[1] 2[1] 3[1] 4[1] 5[1] 6[1] 7[1] .....
-* 0[2] 1[2] 2[2] 3[2] 4[2] 5[2] 6[2] 7[2] .....
-* 0[3] 1[3] 2[3] 3[3] 4[3] 5[3] 6[3] 7[3] .....
-* 0[4] 1[4] 2[4] 3[4] 4[4] 5[4] 6[4] 7[4] .....
-* 0[5] 1[5] 2[5] 3[5] 4[5] 5[5] 6[5] 7[5] .....
-* 0[6] 1[6] 2[6] 3[6] 4[6] 5[6] 6[6] 7[6] .....
-* 0[7] 1[7] 2[7] 3[7] 4[7] 5[7] 6[7] 7[7] .....
-*
-* local buffer:
-*
-* 0[7] 0[6] 0[5] 0[4] 0[3] 0[2] 0[1] 0[0] ,
-* 1[7] 1[6] 1[5] 1[4] 1[3] 1[2] 1[1] 1[0] ,
-* 2[7] 2[6] 2[5] 2[4] 2[3] 2[2] 2[1] 2[0] ,
-* 3[7] 3[6] 3[5] 3[4] 3[3] 3[2] 3[1] 3[0] ,
-* 4[7] 4[6] 4[5] 4[4] 4[3] 4[2] 4[1] 4[0] ,
-* 5[7] 5[6] 5[5] 5[4] 5[3] 5[2] 5[1] 5[0] ,
-* 6[7] 6[6] 6[5] 6[4] 6[3] 6[2] 6[1] 6[0] ,
-* 7[7] 7[6] 7[5] 7[4] 7[3] 7[2] 7[1] 7[0] ,
-*
-* So before writing to the device, we take a 'block' which is 8 pixels by 8 pixels,
-* and rotate it to match the lcd ram
-*
-*/
-
 /**
-  *@brief rotates an 8x8 matrix of bits
-  *@param A input array
-  *@param B output array
-  *
-  *@notes 'Hackers Delight' page 108, Henry S. Warren
+  *@brief custom pixel writing function
   */
-inline void transpose8(uint8_t A[8], uint8_t B[8])
+mrt_status_t sed15xx_write_pixel(mono_gfx_t* gfx, int x, int y, uint8_t val)
 {
-   uint32_t x, y, t;
+  if(( x < 0) || (x >= gfx->mWidth) || (y < 0) || (y>= gfx->mHeight))
+    return MRT_STATUS_OK;
 
-   // Load the array and pack it into x and y.
+    if(val)
+      gfx->mBuffer[x + (y/8)*gfx->mWidth] |=  (1 << (y&7));
+    else
+      gfx->mBuffer[x + (y/8)*gfx->mHeight] &= ~(1 << (y&7));
 
-   x = (A[0]<<24)   | (A[1]<<16)   | (A[2]<<8) | A[3];
-   y = (A[4]<<24) | (A[5]<<16) | (A[6]<<8) | A[7];
-
-   t = (x ^ (x >> 7)) & 0x00AA00AA;  x = x ^ t ^ (t << 7);
-   t = (y ^ (y >> 7)) & 0x00AA00AA;  y = y ^ t ^ (t << 7);
-
-   t = (x ^ (x >>14)) & 0x0000CCCC;  x = x ^ t ^ (t <<14);
-   t = (y ^ (y >>14)) & 0x0000CCCC;  y = y ^ t ^ (t <<14);
-
-   t = (x & 0xF0F0F0F0) | ((y >> 4) & 0x0F0F0F0F);
-   y = ((x << 4) & 0xF0F0F0F0) | (y & 0x0F0F0F0F);
-   x = t;
-
-   B[0]=x>>24;    B[1]=x>>16;    B[2]=x>>8;  B[3]=x;
-   B[4]=y>>24;  B[5]=y>>16;  B[6]=y>>8;  B[7]=y;
+  return MRT_STATUS_OK;
 }
+
 
 mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int height )
 {
@@ -79,6 +34,9 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int 
 
   // initialize canvas as buffered canvas
   mono_gfx_init_buffered(&dev->mCanvas, width, height);
+
+  //use custom pixel function to handle pixel mapping
+  dev->mCanvas.fWritePixel = &sed15xx_write_pixel;
 
 /*
    * Initialize display.  This code follows the sequence in the
@@ -137,14 +95,10 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   //local buffer to store transposed block
   uint8_t transposedBuffer[8];
 
-  for(int i=0; i < dev->mCanvas.mBufferSize/8; i++)
+  for(int i=0; i < dev->mCanvas.mBufferSize; i++)
   {
 
-    //rotate block of pixels to match lcd memory structure. see README.md for more information
-    transpose8(&dev->mCanvas.mBuffer[i*8], transposedBuffer);
 
-    for(int a=0; a <8; a++)
-    {
       //set WR low
       MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
 
@@ -153,7 +107,8 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
         MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, ~(dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
       else
         MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
-      //set WR high to clock in cmd
+
+      //set WR high to clock in data
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
     }
