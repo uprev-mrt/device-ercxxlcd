@@ -111,8 +111,6 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
       //set WR high to clock in data
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
-    }
-
   }
 
   //re-enable display
