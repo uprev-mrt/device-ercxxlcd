@@ -45,7 +45,9 @@ typedef struct{
   uint8_t mDataOffset;    //data offset on port
   mrt_gpio_t mWR;         //WR pin
   mrt_gpio_t mRD;         //RD pin
-  mrt_gpio_t mA0;         //A0 pin
+  mrt_gpio_t mA0;         //A0 pin 1: = D0-7 are display data, 0: D0-7 are command data
+  mrt_gpio_t mCS;         //Chip select
+  mrt_gpio_t mRST;        // Chip reset
 }sed15xx_hw_cfg_t;
 
 typedef struct{
@@ -71,6 +73,13 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw, int width, int h
   *@param cmd command to send
   */
 void sed15xx_cmd(sed15xx_t* dev, uint8_t cmd);
+
+/**
+  *@brief read status of driver
+  *@param dev ptr to sed15xx device
+  */
+uint8_t sed15xx_get_status(sed15xx_t* dev);
+
 
 /**
   *@brief updates the device with the local buffer

@@ -30,6 +30,11 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int 
   //copy in hw config
   memcpy(&dev->mHW, hw, sizeof(sed15xx_hw_cfg_t));
 
+  // make sure we are in data mode
+  MRT_GPIO_WRITE(dev->mHW.mRST, LOW);
+  MRT_GPIO_WRITE(dev->mHW.mRD, HIGH);
+
+  
   dev->mInverted = false;
 
   // initialize canvas as buffered canvas
@@ -37,6 +42,8 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int 
 
   //use custom pixel function to handle pixel mapping
   dev->mCanvas.fWritePixel = &sed15xx_write_pixel;
+
+  uint8_t status = sed15xx_get_status(dev);
 
 /*
    * Initialize display.  This code follows the sequence in the
@@ -74,6 +81,32 @@ void sed15xx_cmd(sed15xx_t* dev, uint8_t cmd)
   //set WR high to clock in cmd
   MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
+  MRT_DELAY_MS(1);
+
+}
+
+uint8_t sed15xx_get_status(sed15xx_t* dev)
+{
+  uint32_t stat;
+
+  //set bus to command/ctrl mode
+  MRT_GPIO_WRITE(dev->mHW.mA0, LOW);
+
+  //set WR HIGH
+  MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+
+  //set RD LOW
+  MRT_GPIO_WRITE(dev->mHW.mRD, LOW);
+    MRT_DELAY_MS(1);
+
+  //write command byte
+  stat = MRT_GPIO_PORT_READ(dev->mHW.mPort);
+  stat = (stat >> dev->mHW.mDataOffset) & 0xFF;
+
+  //set RD HIGH
+  MRT_GPIO_WRITE(dev->mHW.mRD, HIGH);
+
+  return stat;
 }
 
 mrt_status_t sed15xx_refresh(sed15xx_t* dev)
@@ -110,6 +143,7 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 
       //set WR high to clock in data
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+      MRT_DELAY_MS(1);
 
   }
 
