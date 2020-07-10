@@ -32,7 +32,17 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int 
 
   // make sure we are in data mode
   MRT_GPIO_WRITE(dev->mHW.mRST, LOW);
+  MRT_DELAY_MS(1);
+  MRT_GPIO_WRITE(dev->mHW.mRST, HIGH);
+  MRT_GPIO_WRITE(dev->mHW.mCS, LOW);
   MRT_GPIO_WRITE(dev->mHW.mRD, HIGH);
+  MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+
+  uint32_t dataMask = 0xFF << dev->mHW.mDataOffset;
+
+
+  //release data pins
+  //MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, dataMask);
 
   
   dev->mInverted = false;
@@ -78,8 +88,12 @@ void sed15xx_cmd(sed15xx_t* dev, uint8_t cmd)
   //write command byte
   MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (cmd << (dev->mHW.mDataOffset)));
 
+  MRT_DELAY_MS(1);
   //set WR high to clock in cmd
   MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+
+  //release data pins
+  MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, dataMask);
 
   MRT_DELAY_MS(1);
 
@@ -89,15 +103,16 @@ uint8_t sed15xx_get_status(sed15xx_t* dev)
 {
   uint32_t stat;
 
+  MRT_GPIO_PORT_SET_DIR(dev->mHW.mPort,(0xFF << dev->mHW.mDataOffset ), MRT_GPIO_MODE_INPUT );
+
   //set bus to command/ctrl mode
   MRT_GPIO_WRITE(dev->mHW.mA0, LOW);
 
-  //set WR HIGH
-  MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
+  MRT_DELAY_MS(1);
 
   //set RD LOW
   MRT_GPIO_WRITE(dev->mHW.mRD, LOW);
-    MRT_DELAY_MS(1);
+  MRT_DELAY_MS(1);
 
   //write command byte
   stat = MRT_GPIO_PORT_READ(dev->mHW.mPort);
@@ -105,6 +120,8 @@ uint8_t sed15xx_get_status(sed15xx_t* dev)
 
   //set RD HIGH
   MRT_GPIO_WRITE(dev->mHW.mRD, HIGH);
+
+  MRT_GPIO_PORT_SET_DIR(dev->mHW.mPort,(0xFF << dev->mHW.mDataOffset ), MRT_GPIO_MODE_OUTPUT );
 
   return stat;
 }
@@ -141,6 +158,8 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
       else
         MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
 
+      MRT_DELAY_MS(1);
+
       //set WR high to clock in data
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
       MRT_DELAY_MS(1);
@@ -149,6 +168,9 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 
   //re-enable display
   sed15xx_enable(dev, true);
+
+  //release data pins
+  MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, dataMask);
 
   return MRT_STATUS_OK;
 }
