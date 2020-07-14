@@ -33,7 +33,7 @@
 #define SED15XX_CMD_RESET                            (0xE2)
 #define SED15XX_CMD_BOOSTER_RATIO_SET                (0xF8)
 #define SED15XX_CMD_START_LINE_SET(line)             (0x40 | (line))
-#define SED15XX_CMD_PAGE_ADDRESS_SET(page)           (0xD0 | (page))
+#define SED15XX_CMD_PAGE_ADDRESS_SET(page)           (0xB0 | (page))
 #define SED15XX_CMD_COLUMN_ADDRESS_SET_HIGH(column)  (0x10 | ((column >> 4) & 0x0F))
 #define SED15XX_CMD_COLUMN_ADDRESS_SET_LOW(column)   (0x00 | ((column >> 0) & 0x0F))
 

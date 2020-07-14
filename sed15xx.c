@@ -32,7 +32,7 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int 
 
   // make sure we are in data mode
   MRT_GPIO_WRITE(dev->mHW.mRST, LOW);
-  MRT_DELAY_MS(1);
+  //MRT_DELAY_MS(1);
   MRT_GPIO_WRITE(dev->mHW.mRST, HIGH);
   MRT_GPIO_WRITE(dev->mHW.mCS, LOW);
   MRT_GPIO_WRITE(dev->mHW.mRD, HIGH);
@@ -70,6 +70,7 @@ mrt_status_t sed15xx_init(sed15xx_t* dev, sed15xx_hw_cfg_t* hw,  int width, int 
    sed15xx_cmd( dev , SED15XX_CMD_START_LINE_SET(0x0));
    sed15xx_cmd( dev , SED15XX_CMD_BOOSTER_RATIO_SET);
    sed15xx_cmd( dev , 0x0);
+   sed15xx_cmd( dev, SED15XX_CMD_DISPLAY_ALL_POINTS_OFF);
    sed15xx_cmd( dev , SED15XX_CMD_DISPLAY_ON);
 
   return MRT_STATUS_OK;
@@ -88,14 +89,14 @@ void sed15xx_cmd(sed15xx_t* dev, uint8_t cmd)
   //write command byte
   MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (cmd << (dev->mHW.mDataOffset)));
 
-  MRT_DELAY_MS(1);
+  //MRT_DELAY_MS(1);
   //set WR high to clock in cmd
   MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
 
   //release data pins
   MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, dataMask);
 
-  MRT_DELAY_MS(1);
+  //MRT_DELAY_MS(1);
 
 }
 
@@ -108,11 +109,11 @@ uint8_t sed15xx_get_status(sed15xx_t* dev)
   //set bus to command/ctrl mode
   MRT_GPIO_WRITE(dev->mHW.mA0, LOW);
 
-  MRT_DELAY_MS(1);
+  //MRT_DELAY_MS(1);
 
   //set RD LOW
   MRT_GPIO_WRITE(dev->mHW.mRD, LOW);
-  MRT_DELAY_MS(1);
+  //MRT_DELAY_MS(1);
 
   //write command byte
   stat = MRT_GPIO_PORT_READ(dev->mHW.mPort);
@@ -130,40 +131,41 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 {
   uint32_t dataMask = 0xFF << dev->mHW.mDataOffset;
 
-  //set cursor to 0,0
-  sed15xx_cmd(dev,SED15XX_CMD_START_LINE_SET(0));
-  sed15xx_cmd(dev,SED15XX_CMD_PAGE_ADDRESS_SET(0));
-  sed15xx_cmd(dev,SED15XX_CMD_COLUMN_ADDRESS_SET_LOW(0));
-  sed15xx_cmd(dev,SED15XX_CMD_COLUMN_ADDRESS_SET_HIGH(0));
 
   //disable display while we write the data
   sed15xx_enable(dev, false);
 
-  // make sure we are in data mode
-  MRT_GPIO_WRITE(dev->mHW.mA0, HIGH);
+  int addr = 0;
 
-  //local buffer to store transposed block
-  uint8_t transposedBuffer[8];
-
-  for(int i=0; i < dev->mCanvas.mBufferSize; i++)
+  for (int i = 0; i < (dev->mCanvas.mHeight/8); i++)
   {
 
+    //set cursor to next page column 0
+    sed15xx_cmd(dev,SED15XX_CMD_PAGE_ADDRESS_SET(i));
+    sed15xx_cmd(dev,SED15XX_CMD_COLUMN_ADDRESS_SET_LOW(0));
+    sed15xx_cmd(dev,SED15XX_CMD_COLUMN_ADDRESS_SET_HIGH(0));
 
+    // make sure we are in data mode
+    MRT_GPIO_WRITE(dev->mHW.mA0, HIGH);
+
+    for(int a =0; a < dev->mCanvas.mWidth; a++)
+    {
       //set WR low
       MRT_GPIO_WRITE(dev->mHW.mWR, LOW);
 
+      addr = (i*dev->mCanvas.mWidth) + a;
+
       //write data byte (invert pixels if mInverted is set)
       if(dev->mInverted)
-        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, ~(dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
+        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, ~(dev->mCanvas.mBuffer[addr] << (dev->mHW.mDataOffset)));
       else
-        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mCanvas.mBuffer[i] << (dev->mHW.mDataOffset)));
+        MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, (dev->mCanvas.mBuffer[addr] << (dev->mHW.mDataOffset)));
 
-      MRT_DELAY_MS(1);
+      //MRT_DELAY_MS(1);
 
       //set WR high to clock in data
       MRT_GPIO_WRITE(dev->mHW.mWR, HIGH);
-      MRT_DELAY_MS(1);
-
+    }
   }
 
   //re-enable display
