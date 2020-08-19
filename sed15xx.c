@@ -19,7 +19,7 @@ mrt_status_t sed15xx_write_pixel(mono_gfx_t* gfx, int x, int y, uint8_t val)
     if(val)
       gfx->mBuffer[x + (y/8)*gfx->mWidth] |=  (1 << (y&7));
     else
-      gfx->mBuffer[x + (y/8)*gfx->mHeight] &= ~(1 << (y&7));
+      gfx->mBuffer[x + (y/8)*gfx->mWidth] &= ~(1 << (y&7));
 
   return MRT_STATUS_OK;
 }
