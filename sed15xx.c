@@ -16,10 +16,16 @@ mrt_status_t sed15xx_write_pixel(mono_gfx_t* gfx, int x, int y, uint8_t val)
   if(( x < 0) || (x >= gfx->mWidth) || (y < 0) || (y>= gfx->mHeight))
     return MRT_STATUS_OK;
 
+    int addr = x + (y/8)*gfx->mWidth; //get byte in buffer containing pixel
+
+    if(val == MONO_GFX_PIXEL_INVERT)
+      val = !(gfx->mBuffer[addr] &  (1 << (y&7)));
+
     if(val)
-      gfx->mBuffer[x + (y/8)*gfx->mWidth] |=  (1 << (y&7));
-    else
-      gfx->mBuffer[x + (y/8)*gfx->mWidth] &= ~(1 << (y&7));
+      gfx->mBuffer[addr] |=  (1 << (y&7));
+    else 
+      gfx->mBuffer[addr] &= ~(1 << (y&7));
+  
 
   return MRT_STATUS_OK;
 }
@@ -197,13 +203,13 @@ mrt_status_t sed15xx_sw_reset(sed15xx_t* dev)
 
 mrt_status_t sed15xx_draw_bmp(sed15xx_t* dev, uint16_t x, uint16_t y, GFXBmp* bmp)
 {
-  return mono_gfx_draw_bmp(&dev->mCanvas, x,y,bmp);
+  return mono_gfx_draw_bmp(&dev->mCanvas, x,y,bmp,1);
 }
 
 mrt_status_t sed15xx_print( sed15xx_t* dev, uint16_t x, uint16_t y, const char * text)
 {
 
-  return mono_gfx_print(&dev->mCanvas,x,y,text);
+  return mono_gfx_print(&dev->mCanvas,x,y,text,1);
 }
 
 mrt_status_t sed15xx_fill(sed15xx_t* dev, uint8_t val)
