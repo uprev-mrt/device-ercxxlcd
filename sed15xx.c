@@ -139,7 +139,7 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
 
 
   //disable display while we write the data
-  sed15xx_enable(dev, false);
+  //sed15xx_enable(dev, false);
 
   int addr = 0;
 
@@ -175,7 +175,7 @@ mrt_status_t sed15xx_refresh(sed15xx_t* dev)
   }
 
   //re-enable display
-  sed15xx_enable(dev, true);
+  //sed15xx_enable(dev, true);
 
   //release data pins
   MRT_GPIO_PORT_WRITE(dev->mHW.mPort, dataMask, dataMask);
