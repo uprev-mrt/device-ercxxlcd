@@ -6,4 +6,4 @@ category: Device/Displays
 requires: [MonoGfx]
 description: Monochromatic display
 datasheet: https://www.mikrocontroller.net/attachment/10245/SED1565.pdf
-mfg: mikrocontroller
+mfr: mikrocontroller
